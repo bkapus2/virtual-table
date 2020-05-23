@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+  <title>Virtual Table</title>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <!-- <link rel='stylesheet' type='text/css' media='screen' href='main.css'> -->
+  <script src='index.js'></script>
+  <script src='store.js'></script>
+</head>
+<body>
+  <div id="table" style="resize: both; display: inline-block; overflow: hidden; padding: 20px;">
+
+  </div>
+  <script>
+    const el = document.getElementById('table');
+    let rows = Array(10000).fill(null).map(() => ({}));
+    let cols = Array(100).fill(null).map(() => ({}));
+    const vt = VirtualTable({
+      el,
+      rows,
+      cols,
+      width: 400,
+      height: 300,
+    });
+    // const interval = setInterval(() => {
+    //   if (rows.length < 100) {
+    //     rows = [ ...rows, {} ]
+    //     vt.update({ rows })
+    //   } else {
+    //     clearInterval(interval);
+    //   }
+    // }, 100);
+    
+    let observer = new MutationObserver(mutations => {
+      vt.update({ width: el.clientWidth-40, height: el.clientHeight-40 })
+    });
+    observer.observe(el, { attributes: true });
+  </script>
+</body>
+</html>
