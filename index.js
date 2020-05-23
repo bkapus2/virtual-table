@@ -31,9 +31,8 @@ function ViewPort(store) {
   const viewPort = document.createElement('div');
   viewPort.style = `
     border: 1px solid black;
-    overflowX: auto;
-    overflowY: auto;
     overflow: auto;
+    position: relative;
   `;
 
   const queueSizeUpdate = queueRaf((width, height) => {
@@ -67,6 +66,26 @@ function ViewPort(store) {
   return viewPort;
 };
 
+function Row(store, yIdx) {
+  const row = document.createElement('div');
+  row.style = `
+    height: ${store.getters.heights[yIdx]}px;
+    display: flex;
+    flex-direction: row;
+  `;
+  return row;
+}
+
+function Cell(store, yIdx, xIdx) {
+  const cell = document.createElement('div');
+  cell.style = `
+    border: 1px solid #ccc;
+    width: ${store.getters.widths[xIdx]}px;
+    height: 100%;
+  `
+  return cell;
+}
+
 function BackDrop(store) {
   const backDrop = document.createElement('div');
   backDrop.style = `
@@ -85,66 +104,92 @@ function BackDrop(store) {
   return backDrop;
 }
 
-function Cell(store) {
-  const element = document.createElement('div');
-  element.style = `
-    border: 1px solid #ccc;
-    box-sizing: border-box;
+function Canvas(store) {
+  const canvas = document.createElement('div');
+  canvas.style = `
     position: absolute;
   `;
-  function attach(x, y) {
-    element.style.width = `${store.getters.widths[x]}px`;
-    element.style.height = `${store.getters.heights[y]}px`;
-    element.style.left = `${store.getters.hOffsets[x]}px`;
-    element.style.top = `${store.getters.vOffsets[y]}px`;
-    cell.isAttached = true;
-    cell.x = x;
-    cell.y = y;
-  }
-  function detach() {
-    cell.isAttached = false;
-    cell.x = null;
-    cell.y = null;
-  }
-  const cell = { element, attach, detach, isAttached: false, x: null, y: null }
-  return cell;
-}
 
-function CellPool(store) {
-  let freeCells = [];
-  const inUseCells = new Map();
-
-  function get(x, y) {
-    const key = `${x},${y}`;
-    let cell =inUseCells.get(key);
-    if (cell) {
-      cell = inUseCells.get(key);
-    } else if (!freeCells.length) {
-      cell = Cell(store);
-      inUseCells.set(key, cell);
-    } else {
-      cell = freeCells.shift();
-      inUseCells.set(`${x},${y}`, cell);
-    }
-    return cell;
-  }
-
-  function releaseRange(xMin, xMax, yMin, yMax) {
-    inUseCells.forEach((cell, key)=> {
-      const [xStr, yStr] = key.split(',');
-      const x = parseInt(xStr);
-      const y = parseInt(yStr);
-      if ((x < xMin || x > xMax || y < yMin || y > yMax) && cell.isAttached) {
-        cell.element.parentElement.removeChild(cell.element);
-        cell.detach();
-        inUseCells.delete(key);
-        freeCells.push(cell);
+  watch(() => {
+    const { yMinIdx, xMinIdx, yMaxIdx, xMaxIdx, vOffsets, hOffsets } = store.getters;
+    const vOffset = vOffsets[yMinIdx];
+    const hOffset = hOffsets[xMinIdx];
+    canvas.style.top = `${vOffset}px`;
+    canvas.style.left = `${hOffset}px`;
+    canvas.innerHTML = '';
+    for(let y = yMinIdx; y <= yMaxIdx; y++) {
+      const row = Row(store, y);
+      for(let x = xMinIdx; x <= xMaxIdx; x++) {
+        const cell = Cell(store, y, x);
+        row.appendChild(cell);
       }
-    })
-  }
+      canvas.appendChild(row);
+    }
+  })
 
-  return { get, releaseRange }
+  return canvas;
 }
+
+// function Cell(store) {
+//   const element = document.createElement('div');
+//   element.style = `
+//     border: 1px solid #ccc;
+//     box-sizing: border-box;
+//     position: absolute;
+//   `;
+//   function attach(x, y) {
+//     element.style.width = `${store.getters.widths[x]}px`;
+//     element.style.height = `${store.getters.heights[y]}px`;
+//     element.style.left = `${store.getters.hOffsets[x]}px`;
+//     element.style.top = `${store.getters.vOffsets[y]}px`;
+//     cell.isAttached = true;
+//     cell.x = x;
+//     cell.y = y;
+//   }
+//   function detach() {
+//     cell.isAttached = false;
+//     cell.x = null;
+//     cell.y = null;
+//   }
+//   const cell = { element, attach, detach, isAttached: false, x: null, y: null }
+//   return cell;
+// }
+
+// function CellPool(store) {
+//   let freeCells = [];
+//   const inUseCells = new Map();
+
+//   function get(x, y) {
+//     const key = `${x},${y}`;
+//     let cell =inUseCells.get(key);
+//     if (cell) {
+//       cell = inUseCells.get(key);
+//     } else if (!freeCells.length) {
+//       cell = Cell(store);
+//       inUseCells.set(key, cell);
+//     } else {
+//       cell = freeCells.shift();
+//       inUseCells.set(`${x},${y}`, cell);
+//     }
+//     return cell;
+//   }
+
+//   function releaseRange(xMin, xMax, yMin, yMax) {
+//     inUseCells.forEach((cell, key)=> {
+//       const [xStr, yStr] = key.split(',');
+//       const x = parseInt(xStr);
+//       const y = parseInt(yStr);
+//       if ((x < xMin || x > xMax || y < yMin || y > yMax) && cell.isAttached) {
+//         cell.element.parentElement.removeChild(cell.element);
+//         cell.detach();
+//         inUseCells.delete(key);
+//         freeCells.push(cell);
+//       }
+//     })
+//   }
+
+//   return { get, releaseRange }
+// }
 
 function VirtualTable({ width, height, el, cols, rows }) {
   const store = Store({
@@ -211,39 +256,38 @@ function VirtualTable({ width, height, el, cols, rows }) {
   
   const viewPort = ViewPort(store);
   const backDrop = BackDrop(store);
-  const cellContainer = document.createElement('div');
-  cellContainer.style = `
-    position: relative;
-  `;
-  viewPort.appendChild(cellContainer);
+  const canvas = Canvas(store);
   viewPort.appendChild(backDrop);
+  viewPort.appendChild(canvas);
 
-  const cellPool = CellPool(store);
+  
 
-  watch(() => {
-    console.log('repaint');
-    const { yMinIdx, yMaxIdx, xMinIdx, xMaxIdx } = store.getters
-    for(let y = yMinIdx; y <= yMaxIdx; y++) {
-      for(let x = xMinIdx; x <= xMaxIdx; x++) {
-        const cell = cellPool.get(x, y);
-        if (!cell.isAttached) {
-          cell.attach(x,y);
-          cellContainer.appendChild(cell.element);
-          // cell.element.innerHTML = `<span style="padding: 3px;">x: ${x},y: ${y}</span>`
-        }
-        // const input = document.createElement('input');
-        // input.style = `
-        //   position: absolute;
-        //   width: ${store.getters.widths[x]}px;
-        //   height: ${store.getters.heights[y]}px;
-        //   left: ${store.getters.hOffsets[x]}px;
-        //   top: ${store.getters.vOffsets[y]}px;
-        // `;
-        // backDrop.appendChild(input);
-      }
-    }
-    cellPool.releaseRange(xMinIdx, xMaxIdx, yMinIdx, yMaxIdx);
-  })
+  // const cellPool = CellPool(store);
+
+  // watch(() => {
+  //   console.log('repaint');
+  //   const { yMinIdx, yMaxIdx, xMinIdx, xMaxIdx } = store.getters
+  //   for(let y = yMinIdx; y <= yMaxIdx; y++) {
+  //     for(let x = xMinIdx; x <= xMaxIdx; x++) {
+  //       const cell = cellPool.get(x, y);
+  //       if (!cell.isAttached) {
+  //         cell.attach(x,y);
+  //         cellContainer.appendChild(cell.element);
+  //         // cell.element.innerHTML = `<span style="padding: 3px;">x: ${x},y: ${y}</span>`
+  //       }
+  //       // const input = document.createElement('input');
+  //       // input.style = `
+  //       //   position: absolute;
+  //       //   width: ${store.getters.widths[x]}px;
+  //       //   height: ${store.getters.heights[y]}px;
+  //       //   left: ${store.getters.hOffsets[x]}px;
+  //       //   top: ${store.getters.vOffsets[y]}px;
+  //       // `;
+  //       // backDrop.appendChild(input);
+  //     }
+  //   }
+  //   cellPool.releaseRange(xMinIdx, xMaxIdx, yMinIdx, yMaxIdx);
+  // })
 
   return { update }
 }
