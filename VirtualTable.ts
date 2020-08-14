@@ -1,3 +1,5 @@
+import { Store, watch } from './store';
+
 function queueRaf(cb) {
   let isQueued = false;
   let finalArgs = null;
@@ -29,14 +31,12 @@ function throttle(cb, ms=5) {
 
 function ViewPort(store) {
   const viewPort = document.createElement('div');
-  viewPort.style = `
-    border: 1px solid black;
-    overflow: auto;
-    position: relative;
-  `;
+  viewPort.style.border = '1px solid black';
+  viewPort.style.overflow = 'auto';
+  viewPort.style.position = 'relative';
 
   const queueSizeUpdate = queueRaf((width, height) => {
-    viewPort.style.height = `${height || 0}px`;
+    viewPort.style.height = `${height || 0}px`; 
     viewPort.style.width = `${width || 0}px`;
   });
 
@@ -72,32 +72,29 @@ function ViewPort(store) {
 };
 
 function Cell(store) {
-  const cell = {};
-  cell.x = null;
-  cell.y = null;
-  cell.el = document.createElement('div');
-  cell.update = function update({ x, y }) {
-    cell.el.style = `
-      position: absolute;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-      width: ${store.getters.widths[x]}px;
-      height: ${store.getters.heights[y]}px;
-      left: ${store.getters.hOffsets[x]}px;
-      top: ${store.getters.vOffsets[y]}px;
-    `;
-    cell.el.textContent = `${y}, ${x}`;
-    cell.y = y;
-    cell.x = x;
-  }
+  const cell = {
+    x: null,
+    y: null,
+    el: document.createElement('div'),
+    update:function update({ x, y }) {
+      cell.el.style.position = 'absolute';
+      cell.el.style.border = '1px solid #ccc';
+      cell.el.style.boxSizing = ': border-box';
+      cell.el.style.width = `${store.getters.widths[x]}px`;
+      cell.el.style.height = `${store.getters.heights[y]}px`;
+      cell.el.style.left = `${store.getters.hOffsets[x]}px`;
+      cell.el.style.top = `${store.getters.vOffsets[y]}px`;
+      cell.el.textContent = `${y}, ${x}`;
+      cell.y = y;
+      cell.x = x;
+    }
+  };
   return cell;
 }
 
 function BackDrop(store) {
   const backDrop = document.createElement('div');
-  backDrop.style = `
-    position: relative;
-  `;
+  backDrop.style.position = 'relative';
 
   const queueSizeUpdate = queueRaf((width, height) => {
     backDrop.style.width = `${width}px`;
@@ -112,6 +109,10 @@ function BackDrop(store) {
 }
 
 class Pool {
+  private available: Set<any>;
+  private taken: Set<any>;
+  private makeResource: () => any;
+
   constructor(makeResource) {
     this.available = new Set();
     this.taken = new Set();
@@ -143,7 +144,7 @@ class Pool {
   }
 }
 
-function VirtualTable({ width, height, el, cols, rows }) {
+export function VirtualTable({ width, height, el, cols, rows }) {
   const store = Store({
     state: {
       vBuffer: 20,
@@ -196,7 +197,7 @@ function VirtualTable({ width, height, el, cols, rows }) {
     }
   });
 
-  function update({ width, height, el, cols, rows }) {
+  function update({ width, height, el, cols, rows }: { width?: number, height?: number, el?: any, cols?: any[], rows?: any[] }) {
     Array.isArray(rows) && (store.state.rows = rows);
     Array.isArray(cols) && (store.state.cols = cols);
     width !== undefined && (store.state.width = width);
@@ -212,7 +213,7 @@ function VirtualTable({ width, height, el, cols, rows }) {
 
   const cellMap = new Map();
   const cellPool = new Pool(() => {
-    const cell = new Cell(store);
+    const cell = Cell(store);
     viewPort.appendChild(cell.el);
     return cell;
   });
