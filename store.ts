@@ -1,22 +1,23 @@
 let target;
 class Dep {
+  subscribers: (() => void)[];
   constructor () {
-    this.subscribers = [] 
+    this.subscribers = []; 
   }
   depend() {  
     if (target && !this.subscribers.includes(target)) {
-      this.subscribers.push(target)
+      this.subscribers.push(target);
     } 
   }
   notify() {
-    this.subscribers.forEach(sub => sub())
+    this.subscribers.forEach(sub => sub());
   }
 }
 
 function createState(state) {
   Object.keys(state).forEach(key => {
-    let internalValue = state[key]
-    const dep = new Dep()
+    let internalValue = state[key];
+    const dep = new Dep();
     
     Object.defineProperty(state, key, {
       get() {
@@ -28,7 +29,7 @@ function createState(state) {
           internalValue = newVal;
           dep.notify();
         }
-      }
+      },
     });
   });
   return state;
@@ -39,12 +40,12 @@ function createGetters(state, getters) {
   const proxiedGetters = createState(keys.reduce((acc, key) => {
     acc[key] = null;
     return acc;
-  }, {}))
+  }, {}));
   keys.forEach(key => {
     watch(() => {
-      proxiedGetters[key] = getters[key](state, proxiedGetters)
+      proxiedGetters[key] = getters[key](state, proxiedGetters);
     });
-  })
+  });
   return proxiedGetters;
 }
 
@@ -55,29 +56,11 @@ function watch(myFunc) {
   return value;
 }
 
-function Store({
+export function Store({
   state: initialState,
-  getters: getterDefs
+  getters: getterDefs,
 }) {
   const state = createState(initialState);
-  const getters = createGetters(state, getterDefs)
-  return { state, getters }
+  const getters = createGetters(state, getterDefs);
+  return { state, getters };
 }
-
-const store = Store({
-  state: {
-    length: 1,
-    width: 2,
-    height: 3,
-  },
-  getters: {
-    baseArea: (state) => {
-      return state.length * state.width
-    },
-    volume: (state, getters) => {
-      return state.height * getters.baseArea;
-    }
-  }
-})
-
-console.log(store);
