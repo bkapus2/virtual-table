@@ -57,32 +57,39 @@ function ViewPort(store) {
   })
 
   const dispatchScoll = queueRaf(() => {
-    // todo: add a commit step to any mutation to reduce churn in getters
-    store.state.scrollLeft = viewPort.scrollLeft;
-    store.state.scrollTop = viewPort.scrollTop;
+    // todo: add a commit step to any mutation to reduce churn in getters if ever these both update at the same time
+    if (store.state.scrollLeft !== viewPort.scrollLeft) {
+      store.state.scrollLeft = viewPort.scrollLeft;
+    }
+    console.log('scrolltop', viewPort.scrollTop);
+    if (store.state.scrollTop !== viewPort.scrollTop) {
+      store.state.scrollTop = viewPort.scrollTop;
+    }
   });
   viewPort.addEventListener('scroll', dispatchScoll);
 
   return viewPort;
 };
 
-function Row(store, yIdx) {
-  const row = document.createElement('div');
-  row.style = `
-    height: ${store.getters.heights[yIdx]}px;
-    display: flex;
-    flex-direction: row;
-  `;
-  return row;
-}
-
-function Cell(store, yIdx, xIdx) {
-  const cell = document.createElement('div');
-  cell.style = `
-    border: 1px solid #ccc;
-    width: ${store.getters.widths[xIdx]}px;
-    height: 100%;
-  `
+function Cell(store) {
+  const cell = {};
+  cell.x = null;
+  cell.y = null;
+  cell.el = document.createElement('div');
+  cell.update = function update({ x, y }) {
+    cell.el.style = `
+      position: absolute;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      width: ${store.getters.widths[x]}px;
+      height: ${store.getters.heights[y]}px;
+      left: ${store.getters.hOffsets[x]}px;
+      top: ${store.getters.vOffsets[y]}px;
+    `;
+    cell.el.textContent = `${y}, ${x}`;
+    cell.y = y;
+    cell.x = x;
+  }
   return cell;
 }
 
@@ -104,92 +111,37 @@ function BackDrop(store) {
   return backDrop;
 }
 
-function Canvas(store) {
-  const canvas = document.createElement('div');
-  canvas.style = `
-    position: absolute;
-  `;
+class Pool {
+  constructor(makeResource) {
+    this.available = new Set();
+    this.taken = new Set();
+    this.makeResource = makeResource;
+  }
 
-  watch(() => {
-    const { yMinIdx, xMinIdx, yMaxIdx, xMaxIdx, vOffsets, hOffsets } = store.getters;
-    const vOffset = vOffsets[yMinIdx];
-    const hOffset = hOffsets[xMinIdx];
-    canvas.style.top = `${vOffset}px`;
-    canvas.style.left = `${hOffset}px`;
-    canvas.innerHTML = '';
-    for(let y = yMinIdx; y <= yMaxIdx; y++) {
-      const row = Row(store, y);
-      for(let x = xMinIdx; x <= xMaxIdx; x++) {
-        const cell = Cell(store, y, x);
-        row.appendChild(cell);
-      }
-      canvas.appendChild(row);
+  release(resource) {
+    this.available.add(resource);
+    this.taken.delete(resource);
+  }
+
+  reserve() {
+    if (this.available.size) {
+      const { value: resource } = this.available.values().next();
+      this.available.delete(resource);
+      this.taken.add(resource);
+      return resource;
     }
-  })
+    const resource = this.makeResource();
+    this.taken.add(resource);
+    return resource;
+  }
 
-  return canvas;
+  forEach(fn) {
+    let i = 0;
+    for (let resource of this.taken.values()) {
+      fn(resource, i++);
+    }
+  }
 }
-
-// function Cell(store) {
-//   const element = document.createElement('div');
-//   element.style = `
-//     border: 1px solid #ccc;
-//     box-sizing: border-box;
-//     position: absolute;
-//   `;
-//   function attach(x, y) {
-//     element.style.width = `${store.getters.widths[x]}px`;
-//     element.style.height = `${store.getters.heights[y]}px`;
-//     element.style.left = `${store.getters.hOffsets[x]}px`;
-//     element.style.top = `${store.getters.vOffsets[y]}px`;
-//     cell.isAttached = true;
-//     cell.x = x;
-//     cell.y = y;
-//   }
-//   function detach() {
-//     cell.isAttached = false;
-//     cell.x = null;
-//     cell.y = null;
-//   }
-//   const cell = { element, attach, detach, isAttached: false, x: null, y: null }
-//   return cell;
-// }
-
-// function CellPool(store) {
-//   let freeCells = [];
-//   const inUseCells = new Map();
-
-//   function get(x, y) {
-//     const key = `${x},${y}`;
-//     let cell =inUseCells.get(key);
-//     if (cell) {
-//       cell = inUseCells.get(key);
-//     } else if (!freeCells.length) {
-//       cell = Cell(store);
-//       inUseCells.set(key, cell);
-//     } else {
-//       cell = freeCells.shift();
-//       inUseCells.set(`${x},${y}`, cell);
-//     }
-//     return cell;
-//   }
-
-//   function releaseRange(xMin, xMax, yMin, yMax) {
-//     inUseCells.forEach((cell, key)=> {
-//       const [xStr, yStr] = key.split(',');
-//       const x = parseInt(xStr);
-//       const y = parseInt(yStr);
-//       if ((x < xMin || x > xMax || y < yMin || y > yMax) && cell.isAttached) {
-//         cell.element.parentElement.removeChild(cell.element);
-//         cell.detach();
-//         inUseCells.delete(key);
-//         freeCells.push(cell);
-//       }
-//     })
-//   }
-
-//   return { get, releaseRange }
-// }
 
 function VirtualTable({ width, height, el, cols, rows }) {
   const store = Store({
@@ -228,7 +180,7 @@ function VirtualTable({ width, height, el, cols, rows }) {
         // todo: account for scroll bar height
         const maxPx = Math.min(getters.totalHeight, state.height + state.scrollTop + state.vBuffer);
         // todo: binary search, these are ordered
-        return getters.vOffsets.length - getters.vOffsets.slice().reverse().findIndex(offset => offset <= maxPx)
+        return getters.vOffsets.length - 1 - getters.vOffsets.slice().reverse().findIndex(offset => offset <= maxPx)
       },
       xMinIdx: (state, getters) => {
         const minPx = Math.max(0, state.scrollLeft - state.hBuffer);
@@ -239,7 +191,7 @@ function VirtualTable({ width, height, el, cols, rows }) {
         // todo: account for scroll bar height
         const maxPx = Math.min(getters.totalWidth, state.width + state.scrollLeft + state.hBuffer);
         // todo: binary search, these are ordered
-        return getters.hOffsets.length - getters.hOffsets.slice().reverse().findIndex(offset => offset <= maxPx)
+        return getters.hOffsets.length - 1 - getters.hOffsets.slice().reverse().findIndex(offset => offset <= maxPx)
       },
     }
   });
@@ -256,38 +208,42 @@ function VirtualTable({ width, height, el, cols, rows }) {
   
   const viewPort = ViewPort(store);
   const backDrop = BackDrop(store);
-  const canvas = Canvas(store);
   viewPort.appendChild(backDrop);
-  viewPort.appendChild(canvas);
 
-  
+  const cellMap = new Map();
+  const cellPool = new Pool(() => {
+    const cell = new Cell(store);
+    viewPort.appendChild(cell.el);
+    return cell;
+  });
 
-  // const cellPool = CellPool(store);
-
-  // watch(() => {
-  //   console.log('repaint');
-  //   const { yMinIdx, yMaxIdx, xMinIdx, xMaxIdx } = store.getters
-  //   for(let y = yMinIdx; y <= yMaxIdx; y++) {
-  //     for(let x = xMinIdx; x <= xMaxIdx; x++) {
-  //       const cell = cellPool.get(x, y);
-  //       if (!cell.isAttached) {
-  //         cell.attach(x,y);
-  //         cellContainer.appendChild(cell.element);
-  //         // cell.element.innerHTML = `<span style="padding: 3px;">x: ${x},y: ${y}</span>`
-  //       }
-  //       // const input = document.createElement('input');
-  //       // input.style = `
-  //       //   position: absolute;
-  //       //   width: ${store.getters.widths[x]}px;
-  //       //   height: ${store.getters.heights[y]}px;
-  //       //   left: ${store.getters.hOffsets[x]}px;
-  //       //   top: ${store.getters.vOffsets[y]}px;
-  //       // `;
-  //       // backDrop.appendChild(input);
-  //     }
-  //   }
-  //   cellPool.releaseRange(xMinIdx, xMaxIdx, yMinIdx, yMaxIdx);
-  // })
+  watch(() => {
+    const { yMinIdx, xMinIdx, yMaxIdx, xMaxIdx } = store.getters;
+    // need to figure out how to properly map dependency updates
+    const yDiff = yMaxIdx - yMinIdx;
+    if (yDiff < 0 || yDiff > 10) {
+      return;
+    }
+    cellPool.forEach(cell => {
+      if (cell.x < xMinIdx || cell.x > xMaxIdx || cell.y < yMinIdx || cell.y > yMaxIdx) {
+        cellPool.release(cell);
+        cellMap.delete(`${cell.x},${cell.y}`);
+      }
+    })
+    for (let y = yMinIdx; y <= yMaxIdx; y++) {
+      for (let x = xMinIdx; x <= xMaxIdx; x++) {
+        const key = `${x},${y}`
+        if (!cellMap.has(key)) {
+          const cell = cellPool.reserve();
+          cell.update({ x, y });
+          cellMap.set(key, cell);
+        }
+      }
+    }
+    // console.log(cellMap.size);
+    // queue some sort of job to go back and remove unused cells from the table eventually...
+    // will have to do bean counting of if a cell is in or out of the dom then though
+  })
 
   return { update }
 }

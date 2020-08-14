@@ -15,7 +15,7 @@
   </div>
   <script>
     const el = document.getElementById('table');
-    let rows = Array(10000).fill(null).map(() => ({}));
+    let rows = Array(100000).fill(null).map(() => ({}));
     let cols = Array(100).fill(null).map(() => ({}));
     const vt = VirtualTable({
       el,
