@@ -1,16 +1,23 @@
-let target;
+const targets = [];
+const nextFlush = new Set<() => void>();
+function flush() {
+  nextFlush.forEach(action => action());
+}
+
 class Dep {
   subscribers: (() => void)[];
   constructor () {
     this.subscribers = []; 
   }
-  depend() {  
-    if (target && !this.subscribers.includes(target)) {
-      this.subscribers.push(target);
-    } 
+  depend() {
+    targets.forEach(target => {
+      if (target && !this.subscribers.includes(target)) {
+        this.subscribers.push(target);
+      } 
+    })
   }
   notify() {
-    this.subscribers.forEach(sub => sub());
+    this.subscribers.forEach(sub => nextFlush.add(sub));
   }
 }
 
@@ -36,26 +43,39 @@ function createState(state) {
 }
 
 function createGetters(state, getters) {
-  const keys = Object.keys(getters);
-  const proxiedGetters = createState(keys.reduce((acc, key) => {
-    acc[key] = null;
+  const properties = Object.entries(getters).reduce((acc, [key, getter]) => {
+    let initialized = false;
+    let dirty = false;
+    let value;
+    acc[key] = {
+      get() {
+        if (!initialized) {
+          watch(() => {
+            if (initialized) {
+              dirty = true;
+            } else {
+              value = getters[key](state, proxiedGetters);
+              initialized = true;
+            }
+          })
+        }
+        if (dirty) {
+          value = getters[key](state, proxiedGetters);
+          dirty = false;
+        }
+        return value;
+      }
+    }
     return acc;
-  }, {}));
-  keys.forEach(key => {
-    
-  })
-  keys.forEach(key => {
-    watch(() => {
-      proxiedGetters[key] = getters[key](state, proxiedGetters);
-    });
-  });
+  }, {})
+  const proxiedGetters = Object.defineProperties({}, properties);
   return proxiedGetters;
 }
 
 export function watch(myFunc) {
-  target = myFunc;
-  const value = target();
-  target = null;
+  targets.unshift(myFunc);
+  const value = myFunc();
+  targets.shift();
   return value;
 }
 
@@ -65,5 +85,23 @@ export function Store({
 }) {
   const state = createState(initialState);
   const getters = createGetters(state, getterDefs);
-  return { state, getters };
+  return { state, getters, flush };
 }
+
+
+// const store = Store({
+//   state: {
+//     length: 1,
+//     width: 2,
+//     height: 3,
+//   },
+//   getters: {
+//     baseArea: (state) => {
+//       return state.length * state.width;
+//     },
+//     volume: (state, getters) => {
+//       return state.height * getters.baseArea;
+//     },
+//   },
+// });
+// store.getters.volume
