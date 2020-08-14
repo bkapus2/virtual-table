@@ -42,6 +42,9 @@ function createGetters(state, getters) {
     return acc;
   }, {}));
   keys.forEach(key => {
+    
+  })
+  keys.forEach(key => {
     watch(() => {
       proxiedGetters[key] = getters[key](state, proxiedGetters);
     });
@@ -49,7 +52,7 @@ function createGetters(state, getters) {
   return proxiedGetters;
 }
 
-function watch(myFunc) {
+export function watch(myFunc) {
   target = myFunc;
   const value = target();
   target = null;
