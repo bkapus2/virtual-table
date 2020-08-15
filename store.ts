@@ -1,23 +1,45 @@
 const targets = [];
-const nextFlush = new Set<() => void>();
+let nextFlush = new Set<() => void>();
 function flush() {
-  nextFlush.forEach(action => action());
+  nextFlush.forEach(action => {
+    action();
+    nextFlush.delete(action);
+  });
 }
 
 class Dep {
-  subscribers: (() => void)[];
+  isDirty: boolean;
+  providers: Dep[];
+  subscribers: Dep[];
+  dirtyHandlers: (() => void)[]
+
   constructor () {
-    this.subscribers = []; 
+    this.isDirty = false;
+    this.providers = [];
+    this.subscribers = [];
+    this.dirtyHandlers = [];
   }
+
   depend() {
-    targets.forEach(target => {
-      if (target && !this.subscribers.includes(target)) {
-        this.subscribers.push(target);
-      } 
-    })
+    const target = targets[0];
+    if (target && !this.subscribers.includes(target)) {
+      this.subscribers.push(target);
+      target.providers.push(this);
+    }
   }
+
   notify() {
-    this.subscribers.forEach(sub => nextFlush.add(sub));
+    this.subscribers.forEach(sub => sub.triggerUpdate());
+  }
+
+  triggerUpdate() {
+    this.isDirty = true;
+    this.dirtyHandlers.forEach(handler => nextFlush.add(handler));
+    this.notify();
+  }
+
+  onDirty(fn) {
+    this.dirtyHandlers.push(fn);
   }
 }
 
@@ -43,65 +65,62 @@ function createState(state) {
 }
 
 function createGetters(state, getters) {
-  const properties = Object.entries(getters).reduce((acc, [key, getter]) => {
+  const proxiedGetters = { deps: {} };
+  Object.keys(getters).forEach((key) => {
     let initialized = false;
-    let dirty = false;
     let value;
-    acc[key] = {
+    const dep = new Dep();
+    
+    Object.defineProperty(proxiedGetters, key, {
+      enumerable: true,
       get() {
+        dep.depend();
         if (!initialized) {
-          watch(() => {
-            if (initialized) {
-              dirty = true;
-            } else {
-              value = getters[key](state, proxiedGetters);
-              initialized = true;
-            }
-          })
-        }
-        if (dirty) {
+          targets.unshift(dep);
           value = getters[key](state, proxiedGetters);
-          dirty = false;
+          initialized = true;
+          targets.shift();
+        }
+        if (dep.isDirty) {
+          value = getters[key](state, proxiedGetters);
+          dep.isDirty = false;
         }
         return value;
       }
-    }
-    return acc;
-  }, {})
-  const proxiedGetters = Object.defineProperties({}, properties);
+    })
+    
+    Object.defineProperty(proxiedGetters.deps, key, {
+      enumerable: true,
+      value: dep,
+    });
+  });
   return proxiedGetters;
 }
 
-export function watch(myFunc) {
-  targets.unshift(myFunc);
-  const value = myFunc();
-  targets.shift();
-  return value;
+export function watch(func) {
+  const dep = new Dep();
+  const updateValue = () => {
+    targets.unshift(dep)
+    func();
+    dep.isDirty = false;
+    targets.shift();
+  }
+  dep.onDirty(updateValue);
+  updateValue();
 }
 
-export function Store({
+export function Store<S extends {}, G extends { [key: string]: (S,G) => any }>({
   state: initialState,
   getters: getterDefs,
-}) {
+}: {
+  state: S,
+  getters: G
+}): {
+  state: S,
+  getters: any,
+  flush: () => void,
+} {
   const state = createState(initialState);
   const getters = createGetters(state, getterDefs);
   return { state, getters, flush };
 }
-
-
-// const store = Store({
-//   state: {
-//     length: 1,
-//     width: 2,
-//     height: 3,
-//   },
-//   getters: {
-//     baseArea: (state) => {
-//       return state.length * state.width;
-//     },
-//     volume: (state, getters) => {
-//       return state.height * getters.baseArea;
-//     },
-//   },
-// });
-// store.getters.volume

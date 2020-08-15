@@ -25,6 +25,7 @@ describe('store', () => {
     expect(store.getters.volume).toBe(6);
   });
 
+
   it('should handle cascading deps', () => {
     const baseArea = jest.fn().mockImplementation((state) => {
       return state.length * state.width;

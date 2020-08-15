@@ -57,14 +57,13 @@ function ViewPort(store) {
   })
 
   const dispatchScoll = queueRaf(() => {
-    // todo: add a commit step to any mutation to reduce churn in getters if ever these both update at the same time
     if (store.state.scrollLeft !== viewPort.scrollLeft) {
       store.state.scrollLeft = viewPort.scrollLeft;
     }
-    console.log('scrolltop', viewPort.scrollTop);
     if (store.state.scrollTop !== viewPort.scrollTop) {
       store.state.scrollTop = viewPort.scrollTop;
     }
+    store.flush();
   });
   viewPort.addEventListener('scroll', dispatchScoll);
 
@@ -203,6 +202,7 @@ export function VirtualTable({ width, height, el, cols, rows }) {
     width !== undefined && (store.state.width = width);
     height !== undefined && (store.state.height = height);
     el !== undefined && (store.state.el = el);
+    store.flush();
   }
 
   update({ width, height, el, cols, rows });
@@ -220,11 +220,6 @@ export function VirtualTable({ width, height, el, cols, rows }) {
 
   watch(() => {
     const { yMinIdx, xMinIdx, yMaxIdx, xMaxIdx } = store.getters;
-    // need to figure out how to properly map dependency updates
-    const yDiff = yMaxIdx - yMinIdx;
-    if (yDiff < 0 || yDiff > 10) {
-      return;
-    }
     cellPool.forEach(cell => {
       if (cell.x < xMinIdx || cell.x > xMaxIdx || cell.y < yMinIdx || cell.y > yMaxIdx) {
         cellPool.release(cell);
