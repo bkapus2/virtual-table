@@ -1,33 +1,5 @@
 import { Store, watch } from './store';
-
-function queueRaf(cb) {
-  let isQueued = false;
-  let finalArgs = null;
-  return function(...args) {
-    finalArgs = args;
-    if (!isQueued) {
-      isQueued = true;
-      window.requestAnimationFrame(() => {
-        isQueued = false;
-        cb(...finalArgs);
-        finalArgs = null;
-      })
-    }
-  }
-}
-
-function throttle(cb, ms=5) {
-  let timeout;
-  return function(...args) {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    timeout = setTimeout(() => {
-      cb(...args);
-      timeout = null;
-    }, ms);
-  }
-}
+import { queueRaf } from './utils';
 
 function ViewPort(store) {
   const viewPort = document.createElement('div');
@@ -76,9 +48,6 @@ function Cell(store) {
     y: null,
     el: document.createElement('div'),
     update:function update({ x, y }) {
-      cell.el.style.position = 'absolute';
-      cell.el.style.border = '1px solid #ccc';
-      cell.el.style.boxSizing = ': border-box';
       cell.el.style.width = `${store.getters.widths[x]}px`;
       cell.el.style.height = `${store.getters.heights[y]}px`;
       cell.el.style.left = `${store.getters.hOffsets[x]}px`;
@@ -88,6 +57,9 @@ function Cell(store) {
       cell.x = x;
     }
   };
+  cell.el.style.position = 'absolute';
+  cell.el.style.border = '1px solid #ccc';
+  cell.el.style.boxSizing = ': border-box';
   return cell;
 }
 
@@ -95,14 +67,14 @@ function BackDrop(store) {
   const backDrop = document.createElement('div');
   backDrop.style.position = 'relative';
 
-  const queueSizeUpdate = queueRaf((width, height) => {
+  const queueSizeUpdate = queueRaf((width: number, height: number) => {
     backDrop.style.width = `${width}px`;
     backDrop.style.height = `${height}px`;
-  })
+  });
 
   watch(() => {
     queueSizeUpdate(store.getters.totalWidth, store.getters.totalHeight);
-  })
+  });
 
   return backDrop;
 }

@@ -64,7 +64,7 @@ function createState(state) {
   return state;
 }
 
-function createGetters(state, getters) {
+function createGetters<S,G>(state: S, getters: G): any {
   const proxiedGetters = { deps: {} };
   Object.keys(getters).forEach((key) => {
     let initialized = false;
@@ -94,6 +94,7 @@ function createGetters(state, getters) {
       value: dep,
     });
   });
+  // tslint:disable-next-line
   return proxiedGetters;
 }
 
@@ -109,7 +110,12 @@ export function watch(func) {
   updateValue();
 }
 
-export function Store<S extends {}, G extends { [key: string]: (S,G) => any }>({
+type MappedOutputs<T extends { [key: string]: (...args: any) => any } > = {
+  readonly [P in keyof T]: ReturnType<T[P]>
+}
+type Getters<S,G> = { [key: string]: (state: S, getters: any) => any };
+
+export function Store<S extends {}, G extends Getters<S,G>>({
   state: initialState,
   getters: getterDefs,
 }: {
@@ -117,7 +123,7 @@ export function Store<S extends {}, G extends { [key: string]: (S,G) => any }>({
   getters: G
 }): {
   state: S,
-  getters: any,
+  getters: MappedOutputs<G>,
   flush: () => void,
 } {
   const state = createState(initialState);
